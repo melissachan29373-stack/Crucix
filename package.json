@@ -1,20 +1,21 @@
 {
   "name": "crucix",
-  "version": "2.0.0",
-  "description": "Local intelligence engine — 26 OSINT sources, live dashboard, auto-refresh, optional LLM layer.",
+  "version": "3.0.0",
+  "description": "Cloud-native intelligence engine — 27 OSINT sources, real-time dashboard, live alerts.",
   "type": "module",
   "scripts": {
-    "start": "node server.mjs",
-    "dev": "node --trace-warnings server.mjs",
+    "start": "node src/server.mjs",
+    "dev": "node --trace-warnings src/server.mjs",
+    "start:web": "ENABLE_SWEEPS=false ENABLE_TELEGRAM=false ENABLE_DISCORD=false node src/server.mjs",
+    "start:worker": "ENABLE_SSE=false node src/server.mjs",
     "sweep": "node apis/briefing.mjs",
-    "inject": "node dashboard/inject.mjs",
     "brief": "node apis/briefing.mjs",
     "brief:save": "node apis/save-briefing.mjs",
     "diag": "node diag.mjs",
     "clean": "node scripts/clean.mjs",
     "fresh-start": "npm run clean && npm start"
   },
-  "keywords": ["osint", "intelligence", "dashboard", "geopolitical"],
+  "keywords": ["osint", "intelligence", "dashboard", "geopolitical", "railway"],
   "author": "Crucix",
   "license": "AGPL-3.0-only",
   "engines": {

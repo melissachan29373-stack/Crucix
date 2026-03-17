@@ -1,0 +1,213 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>CRUCIX — Initializing</title>
+<meta name="description" content="Crucix Intelligence Engine — Real-time OSINT dashboard aggregating 27 sources">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@300;400;500;600;700&family=Space+Grotesk:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+<style>
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+:root{
+  --bg:#020408;--text:#e8f4f0;--dim:#6a8a82;--accent:#64f0c8;
+  --border:rgba(100,240,200,0.12);--mono:'IBM Plex Mono',monospace;
+  --sans:'Space Grotesk',sans-serif;
+}
+html,body{height:100%;background:var(--bg);color:var(--text);font-family:var(--mono);overflow:hidden}
+
+/* Background effects */
+.bg-radial{position:fixed;inset:0;pointer-events:none;
+  background:radial-gradient(ellipse at 50% 30%,rgba(40,120,100,0.12),transparent 60%),
+             radial-gradient(ellipse at 80% 20%,rgba(40,100,180,0.06),transparent 40%)}
+.bg-grid{position:fixed;inset:0;pointer-events:none;opacity:0.3;
+  background-image:linear-gradient(rgba(100,240,200,0.02) 1px,transparent 1px),linear-gradient(90deg,rgba(100,240,200,0.02) 1px,transparent 1px);
+  background-size:60px 60px;mask-image:radial-gradient(ellipse at 50% 30%,black 20%,transparent 70%)}
+
+.container{min-height:100vh;display:flex;flex-direction:column;align-items:center;justify-content:center;padding:24px;position:relative;z-index:1}
+
+.logo-ring{width:140px;height:140px;border:2px solid var(--border);border-radius:50%;display:flex;align-items:center;justify-content:center;position:relative;margin-bottom:40px}
+.logo-ring::before{content:'';position:absolute;inset:-8px;border:1px solid var(--border);border-radius:50%;border-top-color:var(--accent);animation:spin 2s linear infinite}
+.logo-ring::after{content:'';position:absolute;inset:-16px;border:1px solid rgba(100,240,200,0.06);border-radius:50%;border-bottom-color:rgba(100,240,200,0.15);animation:spin 3s linear infinite reverse}
+@keyframes spin{to{transform:rotate(360deg)}}
+@keyframes pulse-blink{0%,100%{opacity:1}50%{opacity:0.3}}
+@keyframes fadein{from{opacity:0;transform:translateY(6px)}to{opacity:1;transform:none}}
+
+.logo-text{font-size:20px;font-weight:700;letter-spacing:0.2em;color:var(--accent)}
+
+.title{font-family:var(--sans);font-size:14px;font-weight:500;letter-spacing:0.2em;text-transform:uppercase;color:var(--dim);margin-bottom:32px}
+
+#bootLines{font-size:12px;color:var(--dim);text-align:left;line-height:2;width:100%;max-width:440px}
+#bootLines .line{opacity:0;animation:fadein 0.3s ease forwards}
+#bootLines .ok{color:var(--accent)}
+
+#status{font-size:12px;color:var(--accent);letter-spacing:0.15em;margin-top:24px;min-height:20px;display:flex;align-items:center;gap:8px}
+#status .blink{display:inline-block;width:6px;height:6px;border-radius:50%;background:var(--accent);box-shadow:0 0 8px var(--accent);animation:pulse-blink 1.5s ease-in-out infinite;flex-shrink:0}
+
+#countdown{margin-top:12px;font-size:11px;color:var(--dim);letter-spacing:0.1em;text-align:center;min-height:16px;width:100%;max-width:440px}
+#countdown .eta{color:var(--text)}
+#countdown .bar-wrap{width:100%;max-width:440px;height:2px;background:rgba(100,240,200,0.08);margin-top:8px;overflow:hidden;border-radius:1px}
+#countdown .bar-fill{height:100%;background:var(--accent);width:0%;transition:width 1s linear;box-shadow:0 0 6px var(--accent)}
+
+/* No-sweep state */
+#noSweepMsg{display:none;margin-top:32px;text-align:center;max-width:440px}
+#noSweepMsg .msg{font-size:13px;color:var(--dim);line-height:1.6;margin-bottom:16px}
+#noSweepMsg .hint{font-family:var(--mono);font-size:10px;color:rgba(106,138,130,0.5);letter-spacing:0.08em}
+
+/* Responsive */
+@media(max-width:600px){
+  .logo-ring{width:100px;height:100px;margin-bottom:28px}
+  .logo-text{font-size:16px}
+  .title{font-size:12px}
+  #bootLines{font-size:11px;max-width:320px}
+}
+</style>
+</head>
+<body>
+<div class="bg-radial"></div>
+<div class="bg-grid"></div>
+<div class="container">
+  <div class="logo-ring">
+    <span class="logo-text">CX</span>
+  </div>
+  <div class="title">Intelligence Engine</div>
+
+  <div id="bootLines"></div>
+
+  <div id="status">
+    <span class="blink"></span>
+    <span id="statusText">INITIALIZING SYSTEMS...</span>
+  </div>
+
+  <div id="countdown">
+    <span id="etaText"></span>
+    <div class="bar-wrap"><div class="bar-fill" id="barFill"></div></div>
+  </div>
+
+  <div id="noSweepMsg">
+    <div class="msg">Intelligence sweeps are not currently active.<br>The dashboard will display data once a sweep completes.</div>
+    <div class="hint">Set ENABLE_SWEEPS=true to enable automated intelligence gathering</div>
+  </div>
+</div>
+
+<script>
+const SWEEP_ESTIMATE_S = 50;
+
+const lines = [
+  'CRUCIX INTELLIGENCE ENGINE v3.0.0',
+  'INITIATING FIRST SWEEP...',
+  '├── CONNECTING 27 OSINT SOURCES',
+  '├── GDELT · OPENSKY · FIRMS · MARITIME · SAFECAST',
+  '├── FRED · BLS · EIA · TREASURY · GSCPI',
+  '└── TELEGRAM · WHO · OFAC · ACLED · REDDIT · BLUESKY',
+  '<span class="ok">AWAITING SWEEP COMPLETION...</span>',
+];
+
+const container = document.getElementById('bootLines');
+lines.forEach((text, i) => {
+  setTimeout(() => {
+    const div = document.createElement('div');
+    div.className = 'line';
+    div.innerHTML = text;
+    container.appendChild(div);
+  }, i * 220);
+});
+
+const statusMessages = [
+  'COLLECTING DATA...',
+  'PROCESSING SOURCES...',
+  'SYNTHESIZING SIGNALS...',
+  'CORRELATING FEEDS...',
+  'AWAITING COMPLETION...',
+];
+let statusIdx = 0;
+const statusText = document.getElementById('statusText');
+setInterval(() => {
+  statusIdx = (statusIdx + 1) % statusMessages.length;
+  statusText.textContent = statusMessages[statusIdx];
+}, 4000);
+
+// === Countdown ===
+const etaText = document.getElementById('etaText');
+const barFill = document.getElementById('barFill');
+let countdownInterval = null;
+
+function startCountdown(elapsedSeconds) {
+  let remaining = Math.max(0, SWEEP_ESTIMATE_S - elapsedSeconds);
+
+  function tick() {
+    if (remaining <= 0) {
+      etaText.textContent = 'FINALIZING...';
+      barFill.style.width = '99%';
+      return;
+    }
+    const pct = Math.min(99, ((SWEEP_ESTIMATE_S - remaining) / SWEEP_ESTIMATE_S) * 100);
+    barFill.style.width = pct + '%';
+    etaText.innerHTML = 'EST. READY IN <span class="eta">~' + remaining + 's</span>';
+    remaining--;
+  }
+
+  tick();
+  countdownInterval = setInterval(tick, 1000);
+}
+
+// Check status to determine behavior
+fetch('/api/status')
+  .then(r => r.json())
+  .then(status => {
+    if (!status.integrations?.sweeps) {
+      // Sweeps disabled — show standby message
+      document.getElementById('countdown').style.display = 'none';
+      document.getElementById('noSweepMsg').style.display = 'block';
+      statusText.textContent = 'STANDBY MODE';
+      return;
+    }
+
+    if (status.hasData) {
+      // Data already available, redirect immediately
+      location.replace('/');
+      return;
+    }
+
+    // Sweep in progress — show countdown
+    let elapsed = 0;
+    if (status.sweepStartedAt) {
+      elapsed = Math.floor((Date.now() - new Date(status.sweepStartedAt).getTime()) / 1000);
+    }
+    startCountdown(elapsed);
+  })
+  .catch(() => startCountdown(0));
+
+// === SSE — wait for sweep to complete, then redirect ===
+let es;
+try {
+  es = new EventSource('/events');
+  es.onmessage = (e) => {
+    try {
+      const msg = JSON.parse(e.data);
+      if (msg.type === 'update') {
+        es.close();
+        if (countdownInterval) clearInterval(countdownInterval);
+        barFill.style.transition = 'width 0.4s ease';
+        barFill.style.width = '100%';
+        etaText.textContent = '';
+        statusText.textContent = 'TERMINAL READY — LOADING DASHBOARD';
+        setTimeout(() => location.replace('/'), 800);
+      }
+    } catch {}
+  };
+  es.onerror = () => {
+    es.close();
+    setTimeout(() => location.reload(), 5000);
+  };
+} catch {
+  // SSE not available — poll instead
+  setInterval(() => {
+    fetch('/api/status').then(r => r.json()).then(s => {
+      if (s.hasData) location.replace('/');
+    }).catch(() => {});
+  }, 3000);
+}
+</script>
+</body>
+</html>

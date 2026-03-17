@@ -4,16 +4,18 @@ WORKDIR /app
 
 # Copy package files first for better layer caching
 COPY package*.json ./
-RUN npm install --production
+RUN npm ci --omit=dev --ignore-scripts 2>/dev/null || npm install --omit=dev
 
 # Copy source
 COPY . .
 
-# Default port (override with -e PORT=xxxx)
-EXPOSE 3117
+# Railway injects PORT dynamically — do not hardcode
+EXPOSE ${PORT:-3117}
 
-# Health check
-HEALTHCHECK --interval=60s --timeout=10s --retries=3 \
-  CMD wget -qO- http://localhost:3117/api/health || exit 1
+# Use dynamic PORT in health check
+HEALTHCHECK --interval=60s --timeout=10s --start-period=10s --retries=3 \
+  CMD wget -qO- http://localhost:${PORT:-3117}/api/health || exit 1
 
-CMD ["node", "server.mjs"]
+ENV NODE_ENV=production
+
+CMD ["node", "src/server.mjs"]

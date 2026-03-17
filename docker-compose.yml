@@ -6,6 +6,9 @@ services:
       - "${PORT:-3117}:${PORT:-3117}"
     env_file:
       - .env
+    environment:
+      - NODE_ENV=production
+      - STORAGE_MODE=file
     volumes:
       - ./runs:/app/runs
     restart: unless-stopped

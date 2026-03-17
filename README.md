@@ -2,7 +2,7 @@
 
 # Crucix
 
-**Your own intelligence terminal. 27 sources. One command. Zero cloud.**
+**Your own intelligence terminal. 27 sources. One command. Cloud-ready.**
 
 [![Node.js 22+](https://img.shields.io/badge/node-22%2B-brightgreen)](#quick-start)
 [![License: AGPL v3](https://img.shields.io/badge/license-AGPLv3-blue.svg)](LICENSE)
@@ -31,7 +31,7 @@ Crucix pulls satellite fire detection, flight tracking, radiation monitoring, sa
 
 Hook it up to an LLM and it becomes a **two-way intelligence assistant** — pushing multi-tier alerts to Telegram and Discord when something meaningful changes, responding to commands like `/brief` and `/sweep` from your phone, and generating actionable trade ideas grounded in real cross-domain data. Your own analyst that watches the world while you sleep.
 
-No cloud. No telemetry. No subscriptions. Just `node server.mjs` and you're running.
+No telemetry. No subscriptions. Just `npm start` and you're running — locally or on Railway.
 
 ---
 
@@ -64,11 +64,11 @@ npm run dev
 
 > **If `npm run dev` fails silently** (exits with no output), run Node directly instead:
 > ```bash
-> node --trace-warnings server.mjs
+> node --trace-warnings src/server.mjs
 > ```
 > This bypasses npm's script runner, which can swallow errors on some systems (particularly PowerShell on Windows). You can also run `node diag.mjs` to diagnose the exact issue — it checks your Node version, tests each module import individually, and verifies port availability. See [Troubleshooting](#troubleshooting) for more.
 
-The dashboard opens automatically at `http://localhost:3117` and immediately begins its first intelligence sweep. This initial sweep queries all 27 sources in parallel and typically takes 30–60 seconds — the dashboard will appear empty until the sweep completes and pushes the first data update. After that, it auto-refreshes every 15 minutes via SSE (Server-Sent Events). No manual page refresh needed.
+The dashboard is available at `http://localhost:3117` and immediately begins its first intelligence sweep. This initial sweep queries all 27 sources in parallel and typically takes 30–60 seconds — a loading screen is displayed until the sweep completes. After that, it auto-refreshes every 15 minutes via SSE (Server-Sent Events). No manual page refresh needed.
 
 **Requirements:** Node.js 22+ (uses native `fetch`, top-level `await`, ESM)
 
@@ -82,6 +82,35 @@ docker compose up -d
 ```
 
 Dashboard at `http://localhost:3117`. Sweep data persists in `./runs/` via volume mount. Includes a health check endpoint.
+
+### Deploy to Railway
+
+Crucix is production-ready for [Railway](https://railway.com) deployment:
+
+1. Create a new project on Railway
+2. Connect your GitHub repo
+3. Set environment variables in the Railway dashboard:
+   - `NODE_ENV=production` (enables memory-only storage)
+   - `ENABLE_SWEEPS=true`
+   - Any optional API keys (see [API Keys Setup](#api-keys-setup))
+4. Deploy — Railway auto-detects the start command from `railway.json`
+
+**Key Railway notes:**
+- Railway sets `PORT` automatically — do not set it manually
+- `NODE_ENV=production` uses memory-only storage (no filesystem dependency)
+- The health check endpoint is `/api/health`
+- The server starts immediately and becomes healthy before the first sweep completes
+- All API keys and integrations are optional — the app runs with zero configuration
+
+**Run modes:**
+
+| Script | Use Case |
+|--------|----------|
+| `npm start` | Full mode: web server + sweeps + integrations |
+| `npm run start:web` | Web-only: serves dashboard, no sweeps or bots |
+| `npm run start:worker` | Worker-only: sweeps + alerts, no SSE |
+
+For larger deployments, split Crucix into separate web + worker Railway services using `start:web` and `start:worker`.
 
 ---
 
@@ -233,12 +262,30 @@ Crucix still works with zero API keys. 18+ sources require no authentication at 
 
 ```
 crucix/
-├── server.mjs                 # Express dev server (SSE, auto-refresh, LLM, bot commands)
-├── crucix.config.mjs          # Configuration with env var overrides + delta thresholds
+├── src/                       # Production application code
+│   ├── server.mjs             # Production entrypoint (Express, SSE, graceful shutdown)
+│   ├── config/
+│   │   └── index.mjs          # Centralized validated config with safe defaults
+│   ├── storage/
+│   │   ├── index.mjs          # Pluggable storage (memory for cloud, file for local)
+│   │   └── memory-adapter.mjs # Delta memory system adapter
+│   ├── routes/
+│   │   └── api.mjs            # API routes: /api/health, /api/status, /api/data, /events
+│   ├── jobs/
+│   │   └── sweep.mjs          # Intelligence sweep runner (non-blocking, scheduled)
+│   └── services/
+│       └── integrations.mjs   # Telegram & Discord bot initialization
+│
+├── public/                    # Static assets served by Express
+│   ├── jarvis.html            # Self-contained Jarvis HUD (WebGL globe, D3 map)
+│   └── loading.html           # Boot loading page (shown while first sweep runs)
+│
+├── server.mjs                 # Legacy redirect → src/server.mjs
+├── crucix.config.mjs          # Configuration shim → re-exports src/config
 ├── diag.mjs                   # Diagnostic script — run if server fails to start
+├── railway.json               # Railway deployment config (Nixpacks, health check)
 ├── .env.example               # All documented env vars
 ├── package.json               # Runtime: express | Optional: discord.js
-├── docs/                      # Screenshots for README
 │
 ├── apis/
 │   ├── briefing.mjs           # Master orchestrator — runs all 27 sources in parallel
@@ -258,7 +305,7 @@ crucix/
 ├── dashboard/
 │   ├── inject.mjs             # Data synthesis + standalone HTML injection
 │   └── public/
-│       └── jarvis.html        # Self-contained Jarvis HUD
+│       └── jarvis.html        # Legacy dashboard location (prefer public/)
 │
 ├── lib/
 │   ├── llm/                   # LLM abstraction (4 providers, raw fetch, no SDKs)
@@ -352,9 +399,11 @@ crucix/
 
 | Script | Command | Description |
 |--------|---------|-------------|
-| `npm run dev` | `node --trace-warnings server.mjs` | Start dashboard with auto-refresh |
+| `npm start` | `node src/server.mjs` | Production server (full mode) |
+| `npm run dev` | `node --trace-warnings src/server.mjs` | Development with trace warnings |
+| `npm run start:web` | Web-only mode | Dashboard server, no sweeps or bots |
+| `npm run start:worker` | Worker-only mode | Sweeps + alerts, no SSE |
 | `npm run sweep` | `node apis/briefing.mjs` | Run a single sweep, output JSON to stdout |
-| `npm run inject` | `node dashboard/inject.mjs` | Inject latest data into static HTML |
 | `npm run brief:save` | `node apis/save-briefing.mjs` | Run sweep + save timestamped JSON |
 | `npm run diag` | `node diag.mjs` | Run diagnostics (Node version, imports, port check) |
 
@@ -367,6 +416,12 @@ All settings are in `.env` with sensible defaults:
 | Variable | Default | Description |
 |----------|---------|-------------|
 | `PORT` | `3117` | Dashboard server port |
+| `NODE_ENV` | `development` | Set to `production` for cloud deployment |
+| `STORAGE_MODE` | auto | `memory` (cloud) or `file` (local). Auto-detected from `NODE_ENV` |
+| `ENABLE_SWEEPS` | `true` | Enable intelligence sweep cycles |
+| `ENABLE_SSE` | `true` | Enable Server-Sent Events push updates |
+| `ENABLE_TELEGRAM` | `true` | Enable Telegram bot integration |
+| `ENABLE_DISCORD` | `true` | Enable Discord bot integration |
 | `REFRESH_INTERVAL_MINUTES` | `15` | Auto-refresh interval |
 | `LLM_PROVIDER` | disabled | `anthropic`, `openai`, `gemini`, or `codex` |
 | `LLM_API_KEY` | — | API key (not needed for codex) |
@@ -386,13 +441,12 @@ Delta engine thresholds (how sensitive the system is to changes between sweeps) 
 
 ## API Endpoints
 
-When running `npm run dev`:
-
 | Endpoint | Description |
 |----------|-------------|
-| `GET /` | Jarvis HUD dashboard |
-| `GET /api/data` | Current synthesized intelligence data (JSON) |
-| `GET /api/health` | Server status, uptime, source count, LLM status |
+| `GET /` | Jarvis HUD dashboard (or loading page if no data yet) |
+| `GET /api/data` | Current synthesized intelligence data (JSON). Returns `202` with `{status: "pending"}` during first sweep. |
+| `GET /api/health` | Lightweight health check (for Railway/Docker) |
+| `GET /api/status` | Detailed status: version, integrations, storage mode, sweep state |
 | `GET /events` | SSE stream for live push updates |
 
 ---
@@ -405,7 +459,7 @@ This is a known issue where npm's script runner can swallow errors, particularly
 
 **1. Run Node directly (bypasses npm):**
 ```bash
-node --trace-warnings server.mjs
+node --trace-warnings src/server.mjs
 ```
 This is functionally identical to `npm run dev` but gives you full error output.
 
@@ -441,9 +495,9 @@ node --version
 ```
 Crucix requires Node.js 22 or later. If you have an older version, download the latest LTS from [nodejs.org](https://nodejs.org/).
 
-### Dashboard shows empty panels after first start
+### Dashboard shows loading page indefinitely
 
-This is normal — the first sweep takes 30–60 seconds to query all 27 sources. The dashboard will populate automatically once the sweep completes. Check the terminal for sweep progress logs.
+This is normal on first start — the first sweep takes 30–60 seconds to query all 27 sources. The loading page will automatically redirect to the dashboard once the sweep completes. If sweeps are disabled (`ENABLE_SWEEPS=false`), the loading page shows a standby message instead. Check the terminal for sweep progress logs.
 
 ### Some sources show errors
 
